@@ -1,0 +1,68 @@
+{
+	"name": "amazing-iohook-build",
+	"version": "1.0.0",
+	"description": "Builder for amazing-iohook",
+	"main": "app.js",
+	"scripts": {
+		"test": "xo",
+		"build": "node ./bin/build.js",
+		"sign": "node ./bin/sign.js",
+		"docker-build": "docker build -t amazingcat/iohook-build .",
+		"docker-run": "docker run -it --rm -v `pwd`:/iohook amazingcat/iohook-build"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git@git.amazingcat.net:AmazingTime/amazing-iohook-build.git"
+	},
+	"author": "amazingCat LLC Team <team@amazingcat.net>",
+	"license": "MIT",
+	"devDependencies": {
+		"xo": "^0.25.3"
+	},
+	"dependencies": {
+		"cmake-js": "^6.0.0",
+		"debug": "^4.1.1",
+		"minimist": "^1.2.0",
+		"mkdirp": "^1.0.3",
+		"nan": "^2.14.0",
+		"recursive-readdir": "^2.2.2"
+	},
+	"xo": {
+		"env": [
+			"node"
+		],
+		"ignores": [
+			"dist",
+			"src",
+			"libuiohook"
+		],
+		"space": true,
+		"rules": {
+			"no-multiple-empty-lines": [
+				"error",
+				{
+					"max": 2,
+					"maxEOF": 1
+				}
+			],
+			"max-statements-per-line": [
+				"error",
+				{
+					"max": 2
+				}
+			],
+			"padded-blocks": [
+				"error",
+				"always"
+			],
+			"object-curly-spacing": [
+				"error",
+				"always"
+			],
+			"curly": [
+				"error",
+				"multi"
+			]
+		}
+	}
+}
