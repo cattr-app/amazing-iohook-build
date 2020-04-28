@@ -92,6 +92,8 @@ static uiohook_event event;
 // Event dispatch callback.
 static dispatcher_t dispatcher = NULL;
 
+static unsigned short int grab_mouse_click_event = 0x00;
+
 UIOHOOK_API void hook_set_dispatch_proc(dispatcher_t dispatch_proc) {
 	logger(LOG_LEVEL_DEBUG,	"%s [%u]: Setting new dispatch callback to %#p.\n",
 			__FUNCTION__, __LINE__, dispatch_proc);
@@ -227,7 +229,7 @@ static void message_port_proc(void *info) {
 
 static int start_message_port_runloop() {
 	int status = UIOHOOK_FAILURE;
-
+	
 	if (tis_message != NULL) {
 		// Create a runloop observer for the main runloop.
 		observer = CFRunLoopObserverCreate(
@@ -264,7 +266,7 @@ static int start_message_port_runloop() {
 
 				logger(LOG_LEVEL_DEBUG, "%s [%u]: Successful.\n",
 						__FUNCTION__, __LINE__);
-
+				
 				status = UIOHOOK_SUCCESS;
 			}
 			else {
@@ -279,7 +281,7 @@ static int start_message_port_runloop() {
 		else {
 			logger(LOG_LEVEL_ERROR,	"%s [%u]: CFRunLoopObserverCreate failure!\n",
 					__FUNCTION__, __LINE__);
-
+			
 			status = UIOHOOK_ERROR_CREATE_OBSERVER;
 		}
 	}
@@ -372,11 +374,10 @@ static inline void process_key_pressed(uint64_t timestamp, CGEventRef event_ref)
 		tis_message->event = event_ref;
 		tis_message->length = 0;
 		bool is_runloop_main = CFEqual(event_loop, CFRunLoopGetMain());
-
+		
 		if (dispatch_sync_f_f != NULL && dispatch_main_queue_s != NULL && !is_runloop_main) {
 			logger(LOG_LEVEL_DEBUG,	"%s [%u]: Using dispatch_sync_f for key typed events.\n", __FUNCTION__, __LINE__);
-			// (*dispatch_sync_f_f)(dispatch_main_queue_s, tis_message, &keycode_to_lookup);
-			// ^^ commented to fix an issue, see https://github.com/wilix-team/iohook/issues/124#issuecomment-451215897
+			(*dispatch_sync_f_f)(dispatch_main_queue_s, tis_message, &keycode_to_lookup);
 		}
 		#if ! defined(USE_CARBON_LEGACY) && defined(USE_COREFOUNDATION)
 		else if (! is_runloop_main) {
@@ -422,7 +423,7 @@ static inline void process_key_pressed(uint64_t timestamp, CGEventRef event_ref)
 		else {
 			keycode_to_lookup(tis_message);
 		}
-
+		
 		for (unsigned int i = 0; i < tis_message->length; i++) {
 			// Populate key typed event.
 			event.time = timestamp;
@@ -584,7 +585,7 @@ static inline void process_modifier_changed(uint64_t timestamp, CGEventRef event
 	else if (keycode == kVK_CapsLock) {
 		// Process as a key pressed event.
 		process_key_pressed(timestamp, event_ref);
-
+		
 		// Set the caps-lock flag for release.
 		caps_down = true;
 	}
@@ -597,8 +598,8 @@ static inline void process_system_key(uint64_t timestamp, CGEventRef event_ref) 
 	if( CGEventGetType(event_ref) == NX_SYSDEFINED) {
 		#ifdef USE_OBJC
 		// Contributed by Iván Munsuri Ibáñez <munsuri@gmail.com>
-		id event_data = objc_msgSend((id) objc_getClass("NSEvent"), sel_registerName("eventWithCGEvent:"), event_ref);
-		int subtype = (int) objc_msgSend(event_data, sel_registerName("subtype"));
+		id event_data = ((id(*)(id, SEL, void(*)))objc_msgSend)((id) objc_getClass("NSEvent"), sel_registerName("eventWithCGEvent:"), event_ref);
+		int subtype = (int) ((id(*)(id, SEL))objc_msgSend)(event_data, sel_registerName("subtype"));
 		#else
 		CFDataRef data = CGEventCreateData(kCFAllocatorDefault, event_ref);
 		//CFIndex len = CFDataGetLength(data);
@@ -608,7 +609,7 @@ static inline void process_system_key(uint64_t timestamp, CGEventRef event_ref) 
 		#endif
 		if (subtype == 8) {
 			#ifdef USE_OBJC
-			int data = (int) objc_msgSend(event_data, sel_registerName("data1"));
+			int data = (int) ((id(*)(id, SEL))objc_msgSend)(event_data, sel_registerName("data1"));
 			#endif
 
 			int key_code = (data & 0xFFFF0000) >> 16;
@@ -781,7 +782,7 @@ static inline void process_button_pressed(uint64_t timestamp, CGEventRef event_r
 
 	// Populate mouse pressed event.
 	event.time = timestamp;
-	event.reserved = 0x00;
+	event.reserved = grab_mouse_click_event;
 
 	event.type = EVENT_MOUSE_PRESSED;
 	event.mask = get_modifiers();
@@ -804,7 +805,8 @@ static inline void process_button_released(uint64_t timestamp, CGEventRef event_
 
 	// Populate mouse released event.
 	event.time = timestamp;
-	event.reserved = 0x00;
+	event.time = timestamp;
+	event.reserved = grab_mouse_click_event;
 
 	event.type = EVENT_MOUSE_RELEASED;
 	event.mask = get_modifiers();
@@ -822,10 +824,11 @@ static inline void process_button_released(uint64_t timestamp, CGEventRef event_
 	dispatch_event(&event);
 
 	// If the pressed event was not consumed...
-	if (event.reserved ^ 0x01 && mouse_dragged != true) {
+	if ((event.reserved ^ 0x01 || grab_mouse_click_event ^ 0x00) && mouse_dragged != true) {
 		// Populate mouse clicked event.
 		event.time = timestamp;
-		event.reserved = 0x00;
+
+		event.reserved = grab_mouse_click_event;
 
 		event.type = EVENT_MOUSE_CLICKED;
 		event.mask = get_modifiers();
@@ -941,7 +944,7 @@ static inline void process_mouse_wheel(uint64_t timestamp, CGEventRef event_ref)
         }
 
 
-
+		
 		if (CGEventGetIntegerValueField(event_ref, kCGScrollWheelEventDeltaAxis1) != 0) {
 			// Wheel Rotated Up or Down.
 			event.data.wheel.direction = WHEEL_VERTICAL_DIRECTION;
@@ -1101,6 +1104,14 @@ CGEventRef hook_event_proc(CGEventTapProxy tap_proxy, CGEventType type, CGEventR
 	return result_ref;
 }
 
+UIOHOOK_API void grab_mouse_click(bool enabled) {
+	if (enabled) {
+		grab_mouse_click_event = 0x01;
+	} else {
+		grab_mouse_click_event = 0x00;
+	}
+}
+
 UIOHOOK_API int hook_run() {
 	int status = UIOHOOK_SUCCESS;
 
@@ -1146,7 +1157,7 @@ UIOHOOK_API int hook_run() {
 											// for caps-lock release and multi-media keys.
 											CGEventMaskBit(NX_SYSDEFINED);
 				#endif
-
+				
 				// Create the event tap.
 				hook->port = CGEventTapCreate(
 						kCGSessionEventTap,			// kCGHIDEventTap
@@ -1159,18 +1170,18 @@ UIOHOOK_API int hook_run() {
 				if (hook->port != NULL) {
 					logger(LOG_LEVEL_DEBUG,	"%s [%u]: CGEventTapCreate Successful.\n",
 							__FUNCTION__, __LINE__);
-
+					
 					// Create the runloop event source from the event tap.
 					hook->source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, hook->port, 0);
 					if (hook->source != NULL) {
 						logger(LOG_LEVEL_DEBUG,	"%s [%u]: CFMachPortCreateRunLoopSource successful.\n",
 								__FUNCTION__, __LINE__);
-
+						
 						event_loop = CFRunLoopGetCurrent();
 						if (event_loop != NULL) {
 							logger(LOG_LEVEL_DEBUG,	"%s [%u]: CFRunLoopGetCurrent successful.\n",
 									__FUNCTION__, __LINE__);
-
+							
 							// Create run loop observers.
 							hook->observer = CFRunLoopObserverCreate(
 									kCFAllocatorDefault,
@@ -1183,7 +1194,7 @@ UIOHOOK_API int hook_run() {
 							if (hook->observer != NULL) {
 								logger(LOG_LEVEL_DEBUG,	"%s [%u]: CFRunLoopObserverCreate successful.\n",
 										__FUNCTION__, __LINE__);
-
+								
 								tis_message = (TISMessage *) calloc(1, sizeof(TISMessage));
 								if (tis_message != NULL) {
 									if (! CFEqual(event_loop, CFRunLoopGetMain())) {
@@ -1203,7 +1214,7 @@ UIOHOOK_API int hook_run() {
 											logger(LOG_LEVEL_DEBUG,	"%s [%u]: %s.\n",
 													__FUNCTION__, __LINE__, dlError);
 										}
-
+										
 										if (dispatch_sync_f_f == NULL || dispatch_main_queue_s == NULL) {
 											logger(LOG_LEVEL_DEBUG, "%s [%u]: Failed to locate dispatch_sync_f() or dispatch_get_main_queue()!\n",
 													__FUNCTION__, __LINE__);
@@ -1228,7 +1239,7 @@ UIOHOOK_API int hook_run() {
 									// Create a garbage collector to handle Cocoa events correctly.
 									Class NSAutoreleasePool_class = (Class) objc_getClass("NSAutoreleasePool");
 									id pool = class_createInstance(NSAutoreleasePool_class, 0);
-									auto_release_pool = objc_msgSend(pool, sel_registerName("init"));
+									auto_release_pool = ((id(*)(id, SEL))objc_msgSend)(pool, sel_registerName("init"));
 									#endif
 
 									// Start the hook thread runloop.
@@ -1237,7 +1248,7 @@ UIOHOOK_API int hook_run() {
 
 									#ifdef USE_OBJC
 									//objc_msgSend(auto_release_pool, sel_registerName("drain"));
-									objc_msgSend(auto_release_pool, sel_registerName("release"));
+									((id(*)(id, SEL))objc_msgSend)(auto_release_pool, sel_registerName("release"));
 									#endif
 
 									// Lock back up until we are done processing the exit.
@@ -1248,7 +1259,7 @@ UIOHOOK_API int hook_run() {
 									if (CFRunLoopContainsSource(event_loop, hook->source, kCFRunLoopDefaultMode)) {
 										CFRunLoopRemoveSource(event_loop, hook->source, kCFRunLoopDefaultMode);
 									}
-
+									
 									#if ! defined(USE_CARBON_LEGACY) && defined(USE_COREFOUNDATION)
 									if (! CFEqual(event_loop, CFRunLoopGetMain())) {
 										if (dispatch_sync_f_f == NULL || dispatch_main_queue_s == NULL) {
@@ -1256,7 +1267,7 @@ UIOHOOK_API int hook_run() {
 										}
 									}
 									#endif
-
+									
 									// Free the TIS Message.
 									free(tis_message);
 								}
@@ -1267,7 +1278,7 @@ UIOHOOK_API int hook_run() {
 									// Set the exit status.
 									status = UIOHOOK_ERROR_OUT_OF_MEMORY;
 								}
-
+								
 								// Invalidate and free hook observer.
 								CFRunLoopObserverInvalidate(hook->observer);
 								CFRelease(hook->observer);
@@ -1289,7 +1300,7 @@ UIOHOOK_API int hook_run() {
 							// Set the exit status.
 							status = UIOHOOK_ERROR_GET_RUNLOOP;
 						}
-
+						
 						// Clean up the event source.
 						CFRelease(hook->source);
 					}
@@ -1300,7 +1311,7 @@ UIOHOOK_API int hook_run() {
 						// Set the exit status.
 						status = UIOHOOK_ERROR_CREATE_RUN_LOOP_SOURCE;
 					}
-
+					
 					// Stop the CFMachPort from receiving any more messages.
 					CFMachPortInvalidate(hook->port);
 					CFRelease(hook->port);
@@ -1312,7 +1323,7 @@ UIOHOOK_API int hook_run() {
 					// Set the exit status.
 					status = UIOHOOK_ERROR_CREATE_EVENT_PORT;
 				}
-
+				
 				// Free the hook structure.
 				free(hook);
 			}

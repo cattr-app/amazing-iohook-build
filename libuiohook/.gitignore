@@ -12,12 +12,3 @@
 /Makefile.in
 /configure
 /aclocal.m4
-CMakeFiles
-demo_*
-Release/
-uiohook.dir/
-ALL_BUILD.*
-all_demo.*
-cmake_install.cmake
-libuiohook.sln
-uiohook.vcxproj*

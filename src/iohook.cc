@@ -506,12 +506,10 @@ void HookProcessWorker::Stop()
 }
 
 NAN_METHOD(GrabMouseClick) {
-  // grab_mouse_click function causes errors, idk why
-  // but everything works without this call
-  // if (info.Length() > 0)
-  // {
-  //   grab_mouse_click(info[0]->IsTrue());
-  // }
+  if (info.Length() > 0)
+  {
+    grab_mouse_click(info[0]->IsTrue());
+  }
 }
 
 NAN_METHOD(DebugEnable) {
