@@ -17,14 +17,14 @@
 	"author": "amazingCat LLC Team <team@amazingcat.net>",
 	"license": "MIT",
 	"devDependencies": {
-		"xo": "^0.25.3"
+		"xo": "^0.30.0"
 	},
 	"dependencies": {
-		"cmake-js": "^6.0.0",
+		"cmake-js": "^6.1.0",
 		"debug": "^4.1.1",
-		"minimist": "^1.2.0",
-		"mkdirp": "^1.0.3",
-		"nan": "^2.14.0",
+		"minimist": "^1.2.5",
+		"mkdirp": "^1.0.4",
+		"nan": "^2.14.1",
 		"recursive-readdir": "^2.2.2"
 	},
 	"xo": {

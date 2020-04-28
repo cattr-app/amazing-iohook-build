@@ -97,3 +97,10 @@ build/
 
 # Destination folder for binaries
 dist/
+
+# Automake stuff
+libuiohook/Makefile
+libuiohook/config.status
+libuiohook/include/config.h
+libuiohook/libtool
+libuiohook/pc/uiohook.pc
